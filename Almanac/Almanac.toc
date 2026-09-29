@@ -1,0 +1,34 @@
+## Interface: 16001
+## Title: Almanac
+## Notes: Every quest by zone and dungeon, sorted into what you can take, what is not available yet and what you have done, with quest chains, XP and gold totals, and a search for quest rewards.
+## Author: Vedek
+## Version: 1.0.0
+## Category: Quests
+## Dependencies: QuestieDB
+## OptionalDeps: Questie, ForeverDungeonJournal, EllesmereUI
+## SavedVariables: AlmanacDB
+## IconTexture: Interface\Icons\Achievement_Quests_Completed_08
+## AddonCompartmentFunc: Almanac_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: Almanac_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: Almanac_OnAddonCompartmentLeave
+
+Locales.lua
+Compat.lua
+Database.lua
+Data.lua
+ForeverQuests.lua
+NewQuests.lua
+Player.lua
+Status.lua
+Rewards.lua
+Catalog.lua
+Items.lua
+Widgets.lua
+Skin.lua
+Tooltip.lua
+QuestList.lua
+RewardSearch.lua
+Options.lua
+Window.lua
+Minimap.lua
+Core.lua

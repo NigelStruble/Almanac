@@ -1,0 +1,8 @@
+<Bindings>
+	<Binding name="ALMANAC_TOGGLE" header="ALMANAC" category="ADDONS">
+		Almanac_Toggle()
+	</Binding>
+	<Binding name="ALMANAC_REWARDS" category="ADDONS">
+		Almanac_Rewards()
+	</Binding>
+</Bindings>
