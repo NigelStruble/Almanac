@@ -1187,6 +1187,35 @@ test("Forever Dungeon Journal: factions, and a dungeon only it knows", function(
 	NoErrors(client)
 end)
 
+-- Forever's Skyborne are races 95 and 96, at bits 32 and 33 of a quest's
+-- races, not raceID - 1.
+-- own and other: a quest of Almanac's list, in Ruins of Lordaeron, for the
+-- character's faction and for the other.
+for _, skyborne in ipairs({
+	{ name = "High Order", race = 95, faction = "Alliance", races = ALLIANCE + 2 ^ 32, other = HORDE + 2 ^ 33, own = 95250, otherOwn = 92422 },
+	{ name = "Windshaper", race = 96, faction = "Horde", races = HORDE + 2 ^ 33, other = ALLIANCE + 2 ^ 32, own = 92422, otherOwn = 95250 },
+}) do
+	test(("%s Skyborne: %s"):format(skyborne.name, skyborne.faction), function()
+		local client = Start(function(env)
+			local world = World()
+			world.quests[1009] = Quest("An Errand of One's Own", 40, 15, 10, { requiredRaces = skyborne.races })
+			world.quests[1010] = Quest("The Other Side's Errand", 40, 15, 10, { requiredRaces = skyborne.other })
+			env.LibQuestieDB = Mock.QuestieDB(world)
+		end, { forever = true, player = { level = 20, race = skyborne.race, raceFile = "Skyborne", class = "WARRIOR", classID = 1,
+			faction = skyborne.faction } })
+		Open(client)
+		local Catalog = client.ns.Catalog
+		local westfall = Catalog.zones[40]
+		check(westfall and Contains(westfall.quests, 1009), "its faction's quest is listed")
+		check(westfall and not Contains(westfall.quests, 1010), "the other faction's is left out")
+		check(westfall and not Contains(westfall.quests, 1003), "another race's quest is left out")
+		local ruins = Catalog.zones[16611]
+		check(ruins and Contains(ruins.quests, skyborne.own), "Almanac's own quests for its faction are listed")
+		check(ruins and not Contains(ruins.quests, skyborne.otherOwn), "and the other faction's left out")
+		NoErrors(client)
+	end)
+end
+
 test("Forever Dungeon Journal: its rewards, tooltips and /almanac probe", function()
 	local client = Start(Journal)
 	local frame = Open(client)
