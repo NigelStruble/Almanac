@@ -15,15 +15,17 @@ local C, DB, Data, Player = ns.C, ns.DB, ns.Data, ns.Player
 --     has no money, so money is only known once the client has listed it.
 --
 -- XP is "full" XP, what the quest gives a character up to five levels above
--- it; XP() reduces it for a higher character, as the game does.
+-- it; XP() is what the character gets: what the game lists for it when it
+-- has, else the full XP reduced by Forever's rule (Reduce).
 
 local Rewards = {}
 ns.Rewards = Rewards
 
 local _G = _G
-local type, pairs, ipairs, floor, sort, tremove = type, pairs, ipairs, math.floor, table.sort, table.remove
+local type, pairs, ipairs, floor, min, sort, tremove =
+	type, pairs, ipairs, math.floor, math.min, table.sort, table.remove
 
-local client = {} -- [questID] = what the client listed this session
+local client = {} -- [questID] = what the client listed this session, and at what level
 local requested = {} -- [questID] = time asked, until the client answers
 local failed = {} -- [questID] = time the client said it has no such quest
 local queue, queued = {}, {}
@@ -41,17 +43,19 @@ end
 -- XP
 --------------------------------------------------------------------------------
 
--- XP for a character playerLevel of a quest questLevel that gives xp in full:
--- all of it up to five levels above the quest, then 80%, 60%, 40%, 20%, and
--- 10% from ten levels above.
+-- XP for a character playerLevel of a quest questLevel that gives xp in full,
+-- by WoW: Forever's rule: all of it up to five levels above the quest, 80% at
+-- six levels above, 60% at seven, and half from eight on. (Classic went on
+-- down to 10%.)
+local SHARE_ABOVE = { [6] = 0.8, [7] = 0.6 }
+local SHARE_FAR_ABOVE = 0.5
+
 function Rewards.Reduce(xp, questLevel, playerLevel)
-	local factor = 2 * (questLevel - playerLevel) + 20
-	if factor >= 10 then
+	local above = playerLevel - questLevel
+	if above <= 5 then
 		return xp
-	elseif factor < 1 then
-		factor = 1
 	end
-	return floor(xp * factor / 10 + 0.5)
+	return floor(xp * (SHARE_ABOVE[above] or SHARE_FAR_ABOVE) + 0.5)
 end
 
 local function QuestLevel(id)
@@ -146,8 +150,31 @@ function Rewards.FullXP(id)
 	return listed, source
 end
 
+-- The share of its full XP the game lists a quest at for the character now,
+-- when it is above the quest: the game's number over the quest's untuned full
+-- XP (as the game listed it at a lower level, or as QuestieDB has it). Nil
+-- when the game has not listed it at this level, or nothing to compare with.
+local function ListedShare(id)
+	local listed = client[id]
+	if not (listed and listed.level == Player.level and (listed.xp or 0) > 0) or FullAt(id, Player.level) then
+		return nil
+	end
+	local learned = DB.learned[id]
+	local base = learned and learned.cxp
+	if not base then
+		local xp, source = Data.BaseXP(id)
+		base = source == "database" and xp or nil
+	end
+	if not base or base <= 0 then
+		return nil
+	end
+	return min(1, listed.xp / base)
+end
+
 -- The XP the character (or a character of level) gets for the quest: 0 at
--- the highest level, nil when not known.
+-- the highest level, nil when not known. For the character itself, what the
+-- game lists comes first: it is exact, whatever the game's rule. A quest
+-- Forever tunes up gets the same share of its tuned XP.
 function Rewards.XP(id, level)
 	level = level or Player.level
 	if level >= Player.maxLevel then
@@ -156,6 +183,10 @@ function Rewards.XP(id, level)
 	local full = Rewards.FullXP(id)
 	if not full then
 		return nil
+	end
+	local share = level == Player.level and ListedShare(id)
+	if share then
+		return floor(full * share + 0.5)
 	end
 	return Rewards.Reduce(full, QuestLevel(id), level)
 end
@@ -292,6 +323,8 @@ Rewards.Remember = Remember
 
 local function ReadClient(id)
 	local listed = C.CachedRewards(id)
+	-- Its XP is for the character at this level.
+	listed.level = Player.level
 	client[id] = listed
 	if Remember(id, listed) then
 		Announce()
@@ -331,12 +364,18 @@ end
 -- Asking the client
 --------------------------------------------------------------------------------
 
+-- Whether the client has listed a quest at the character's level this session.
+local function ListedNow(id)
+	local listed = client[id]
+	return listed ~= nil and listed.level == Player.level
+end
+
 local function Tick()
 	local count = 0
 	while count < PER_TICK and #queue > 0 do
 		local id = tremove(queue, 1)
 		queued[id] = nil
-		if not client[id] then
+		if not ListedNow(id) then
 			-- Marked first: if the client already has the quest, it answers
 			-- before RequestLoadQuestByID returns.
 			requested[id] = Now()
@@ -360,7 +399,7 @@ function Rewards.Want(ids)
 	local now = Now()
 	for _, id in ipairs(ids) do
 		local asked = requested[id] or failed[id]
-		if not client[id] and not queued[id] and (not asked or now - asked > RETRY) then
+		if not ListedNow(id) and not queued[id] and (not asked or now - asked > RETRY) then
 			if C.HaveQuestData(id) then
 				ReadClient(id)
 			else

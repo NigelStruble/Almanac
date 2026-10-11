@@ -43,9 +43,10 @@ the quests that give one.
   you have done. A section's totals count the chain quests it lists from
   other zones too, and a page's header adds them up with the zone's own.
 - **XP for your level.** A quest gives less XP once you are more than five
-  levels above it: 80% at six levels, down to 10% at ten or more, and none at
-  the highest level. Almanac shows what you would get, with the quest's full
-  XP beside it.
+  levels above it: on WoW: Forever 80% at six levels, 60% at seven and half
+  from eight on, and none at the highest level. Almanac shows what you would
+  get, with the quest's full XP beside it, and uses the game's own number
+  for your character wherever the game has listed one.
 - **What quests really give.** WoW: Forever gives more XP than the quest
   database lists for many dungeon quests. When one of your characters turns a
   quest in, Almanac remembers what it gave, and estimates the other quests of

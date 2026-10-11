@@ -462,17 +462,16 @@ end)
 -- XP and money
 --------------------------------------------------------------------------------
 
-test("XP: full up to five levels above the quest, then less", function()
+test("XP: full up to five levels above the quest, then less (Forever's rule)", function()
 	local client = Start()
 	local Rewards = client.ns.Rewards
 	equal(Rewards.Reduce(1350, 18, 20), 1350, "two levels above")
 	equal(Rewards.Reduce(1350, 18, 23), 1350, "five levels above")
 	equal(Rewards.Reduce(1350, 18, 24), 1080, "six: 80%")
 	equal(Rewards.Reduce(1350, 18, 25), 810, "seven: 60%")
-	equal(Rewards.Reduce(1350, 18, 26), 540, "eight: 40%")
-	equal(Rewards.Reduce(1350, 18, 27), 270, "nine: 20%")
-	equal(Rewards.Reduce(1350, 18, 28), 135, "ten: 10%")
-	equal(Rewards.Reduce(1350, 18, 45), 135, "far above: 10%")
+	equal(Rewards.Reduce(1350, 18, 26), 675, "eight: half")
+	equal(Rewards.Reduce(1350, 18, 28), 675, "ten: half, not Classic's 10%")
+	equal(Rewards.Reduce(1350, 18, 45), 675, "far above: half")
 	equal(Rewards.Reduce(1350, 18, 5), 1350, "below the quest: all of it")
 	equal((Rewards.FullXP(65)), 1350, "the database's XP")
 	equal(select(2, Rewards.FullXP(65)), "database", "from the database")
@@ -482,6 +481,41 @@ test("XP: full up to five levels above the quest, then less", function()
 	client.state.player.level = 60
 	client.ns.Player.Read()
 	equal(Rewards.XP(65), 0, "no XP at the highest level")
+	NoErrors(client)
+end)
+
+test("XP: what the game lists for the character comes first", function()
+	local client = Start(function(env, state)
+		-- Kobold Candles is level 7 and gives 420 in full; the game lists 215
+		-- for a level 20. Red Silk Bandanas (level 17, 1,250 listed) gave a
+		-- character 4,688 when turned in; the game lists 640 for a level 30.
+		state.quests[60] = { title = "Kobold Candles", xp = 215, money = 50 }
+		state.quests[214] = { title = "Red Silk Bandanas", xp = 640, money = 0 }
+		state.saved = { learned = { [214] = { xp = 4688, t = 0 } } }
+	end)
+	local ns, state = client.ns, client.state
+	local Rewards = ns.Rewards
+	equal(Rewards.XP(60), 210, "by Forever's rule until the game says")
+	Rewards.Want({ 60 })
+	Mock.Advance(state, 1)
+	equal(Rewards.XP(60), 215, "what the game lists")
+	equal((Rewards.FullXP(60)), 420, "the full XP is still the quest's")
+	-- A new level: the number listed at the old one is not used, and the
+	-- game is asked again.
+	state.player.level = 21
+	ns.Player.Read()
+	equal(Rewards.XP(60), 210, "not the number listed at level 20")
+	state.quests[60].xp = 214
+	Rewards.Want({ 60 })
+	Mock.Advance(state, 1)
+	equal(Rewards.XP(60), 214, "the game's number at level 21")
+	-- A quest Forever tunes up gets the share the game lists of its tuned XP.
+	state.player.level = 30
+	ns.Player.Read()
+	Rewards.Want({ 214 })
+	Mock.Advance(state, 1)
+	equal(select(2, Rewards.FullXP(214)), "turnin", "its full XP is what it gave")
+	equal(Rewards.XP(214), 2400, "4,688 at the 51.2% the game lists for 1,250")
 	NoErrors(client)
 end)
 
