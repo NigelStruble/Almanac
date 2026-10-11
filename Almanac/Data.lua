@@ -134,11 +134,19 @@ local RACE_FACTION = {
 	[2] = "Horde", [5] = "Horde", [6] = "Horde", [8] = "Horde", [9] = "Horde", [10] = "Horde",
 	[26] = "Horde", [27] = "Horde", [28] = "Horde", [31] = "Horde", [35] = "Horde", [36] = "Horde",
 	[70] = "Horde",
+	[95] = "Alliance", [96] = "Horde", -- High Order and Windshaper Skyborne
 }
+
+-- Races whose bit is not raceID - 1: Forever puts the Skyborne at bits 32/33.
+local RACE_BITS = { [95] = 2 ^ 32, [96] = 2 ^ 33 }
 
 -- The bit of a race or class ID in a quest's allowed races or classes.
 function Data.Bit(id)
 	return 2 ^ ((id or 1) - 1)
+end
+
+function Data.RaceBit(raceID)
+	return RACE_BITS[raceID] or Data.Bit(raceID)
 end
 
 -- Whether bit is set in mask. A mask of 0 (or none) allows everyone.
@@ -154,7 +162,7 @@ function Data.FactionMask(faction)
 	local mask = 0
 	for raceID, raceFaction in pairs(RACE_FACTION) do
 		if raceFaction == faction then
-			mask = mask + Data.Bit(raceID)
+			mask = mask + Data.RaceBit(raceID)
 		end
 	end
 	return mask

@@ -31,7 +31,7 @@ function Player.Read()
 	Player.raceID, Player.raceFile = C.PlayerRace()
 	Player.classID, Player.classFile = C.PlayerClass()
 	Player.faction = C.PlayerFaction()
-	Player.raceBit = Data.Bit(Player.raceID)
+	Player.raceBit = Data.RaceBit(Player.raceID)
 	Player.classBit = Data.Bit(Player.classID)
 	-- The races of the character's faction; just its own race if the faction
 	-- is not known (a new race, or a Pandaren who has not chosen yet).

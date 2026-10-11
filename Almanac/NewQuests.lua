@@ -20,7 +20,8 @@ local _G = _G
 local type, pairs, ipairs, tonumber, floor, sort, format =
 	type, pairs, ipairs, tonumber, math.floor, table.sort, string.format
 
-local FACTION_RACES = { Alliance = 77, Horde = 178 }
+-- Classic races plus Forever's Skyborne (bits 32/33), as QuestieDB's Forever masks.
+local FACTION_RACES = { Alliance = 77 + 2 ^ 32, Horde = 178 + 2 ^ 33 }
 local CLASS_IDS = { WARRIOR = 1, PALADIN = 2, HUNTER = 3, ROGUE = 4, PRIEST = 5, SHAMAN = 7, MAGE = 8, WARLOCK = 9, DRUID = 11 }
 -- Dungeons only the journal knows get zone keys of their own, from here up.
 local MADE_UP = 9000000
