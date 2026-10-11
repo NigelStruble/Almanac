@@ -16,6 +16,7 @@ Player.level = 1
 Player.maxLevel = 60
 Player.completed = {}
 Player.log = {}
+Player.factionBits = {}
 Player.skills = {}
 Player.reps = {}
 
@@ -40,6 +41,7 @@ function Player.Read()
 		mask = mask + Player.raceBit
 	end
 	Player.factionMask = mask
+	Player.factionBits = Data.Bits(mask) -- each race's bit, one by one
 	Player.completed = C.CompletedQuests()
 	Player.log = C.QuestLog()
 	Player.skills = C.Professions()

@@ -87,9 +87,9 @@ local function RaceListed(races)
 		return true
 	end
 	if settings.otherRaces then
-		for bit = 0, 31 do
-			local value = 2 ^ bit
-			if Data.HasBit(Player.factionMask, value) and Data.HasBit(races, value) then
+		-- Every race of the faction, Forever's Skyborne (bits 32/33) too.
+		for _, bit in ipairs(Player.factionBits) do
+			if Data.HasBit(races, bit) then
 				return true
 			end
 		end

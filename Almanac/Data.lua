@@ -125,27 +125,51 @@ Data.GROUPS = {
 	{ key = "other", name = L["Other"] },
 }
 
--- Races by faction, for showing (or not) quests of other races of one's own
--- faction. raceID -> faction.
+-- Races and their factions: raceID -> faction. The classic races, and
+-- WoW: Forever's High Order (95) and Windshaper (96) Skyborne. No later
+-- races: their bits are not Forever's (race 34's would be the Windshaper's),
+-- and one as high as race 70's is past what a number holds exactly, which
+-- rounds the low bits, the classic races, out of a mask.
 local RACE_FACTION = {
 	[1] = "Alliance", [3] = "Alliance", [4] = "Alliance", [7] = "Alliance", [11] = "Alliance",
-	[22] = "Alliance", [25] = "Alliance", [29] = "Alliance", [30] = "Alliance", [32] = "Alliance",
-	[34] = "Alliance", [37] = "Alliance", [52] = "Alliance",
+	[95] = "Alliance",
 	[2] = "Horde", [5] = "Horde", [6] = "Horde", [8] = "Horde", [9] = "Horde", [10] = "Horde",
-	[26] = "Horde", [27] = "Horde", [28] = "Horde", [31] = "Horde", [35] = "Horde", [36] = "Horde",
-	[70] = "Horde",
-	[95] = "Alliance", [96] = "Horde", -- High Order and Windshaper Skyborne
+	[96] = "Horde",
 }
+
+local RACE_IDS = {} -- the races above, in order
+for raceID in pairs(RACE_FACTION) do
+	RACE_IDS[#RACE_IDS + 1] = raceID
+end
+table.sort(RACE_IDS)
 
 -- Races whose bit is not raceID - 1: Forever puts the Skyborne at bits 32/33.
 local RACE_BITS = { [95] = 2 ^ 32, [96] = 2 ^ 33 }
+
+-- One of QuestieDB's published race tables (read-only by its contract), in
+-- the encoding of the game it is built for: raceMaskById (race ID -> bit) or
+-- factionRaceMasks (faction -> its races' bits). Nil from a QuestieDB that
+-- does not publish it. QuestieDB is loaded before Almanac, so this works
+-- before Data.Init.
+local function QuestieRaces(name)
+	local lib = _G.LibQuestieDB
+	local enum = type(lib) == "table" and type(lib.Enum) == "table" and lib.Enum
+	local value = enum and enum[name]
+	return type(value) == "table" and value or nil
+end
 
 -- The bit of a race or class ID in a quest's allowed races or classes.
 function Data.Bit(id)
 	return 2 ^ ((id or 1) - 1)
 end
 
+-- The bit of a race in a quest's allowed races: QuestieDB's, else ours.
 function Data.RaceBit(raceID)
+	local byID = QuestieRaces("raceMaskById")
+	local bit = byID and raceID and byID[raceID]
+	if type(bit) == "number" and bit > 0 then
+		return bit
+	end
 	return RACE_BITS[raceID] or Data.Bit(raceID)
 end
 
@@ -157,9 +181,32 @@ function Data.HasBit(mask, bit)
 	return floor(mask / bit) % 2 == 1
 end
 
--- All the race bits of a faction.
+-- The single bits set in a mask, lowest first (none for 0).
+function Data.Bits(mask)
+	local bits = {}
+	if type(mask) == "number" and mask > 0 then
+		for i = 0, 52 do
+			local value = 2 ^ i
+			if value > mask then
+				break
+			end
+			if floor(mask / value) % 2 == 1 then
+				bits[#bits + 1] = value
+			end
+		end
+	end
+	return bits
+end
+
+-- All the race bits of a faction ("Alliance" or "Horde"; 0 for others):
+-- QuestieDB's mask for it, else the sum of its races' bits.
 function Data.FactionMask(faction)
-	local mask = 0
+	local masks = QuestieRaces("factionRaceMasks")
+	local mask = masks and faction and masks[faction]
+	if type(mask) == "number" then
+		return mask
+	end
+	mask = 0
 	for raceID, raceFaction in pairs(RACE_FACTION) do
 		if raceFaction == faction then
 			mask = mask + Data.RaceBit(raceID)
@@ -170,6 +217,11 @@ end
 
 function Data.RaceFaction(raceID)
 	return RACE_FACTION[raceID]
+end
+
+-- The race IDs Almanac knows, in order.
+function Data.RaceIDs()
+	return RACE_IDS
 end
 
 --------------------------------------------------------------------------------
@@ -252,9 +304,11 @@ function Data.Init()
 	Data.lib = lib
 	LoadSupport(lib)
 	-- Forever's quests QuestieDB does not have yet (NewQuests.lua), and the new
-	-- dungeons they are in.
+	-- dungeons they are in: dungeons too once QuestieDB has all their quests,
+	-- if it does not list the dungeon.
 	local newQuests = ns.NewQuests
-	if newQuests and newQuests.Load(Data.QuestExists) then
+	if newQuests then
+		newQuests.Load(Data.QuestExists)
 		for key in pairs(newQuests.Dungeons()) do
 			Data.dungeonOf[key] = key
 		end

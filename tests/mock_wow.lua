@@ -593,6 +593,9 @@ function Mock.QuestieDB(world)
 			return required >= 1 and required <= 2, "contract"
 		end,
 		contractVersion = 2,
+		-- world.enum: QuestieDB's published race tables (raceMaskById,
+		-- factionRaceMasks), which older versions do not have.
+		Enum = world.enum,
 	}
 end
 
@@ -794,7 +797,8 @@ function Mock.New(options)
 	env.GetMaxPlayerLevel = function()
 		return 60
 	end
-	local RACES = { "Human", "Orc", "Dwarf", "Night Elf", "Undead", "Tauren", "Gnome", "Troll" }
+	local RACES = { "Human", "Orc", "Dwarf", "Night Elf", "Undead", "Tauren", "Gnome", "Troll",
+		[95] = "High Order Skyborne", [96] = "Windshaper Skyborne" }
 	env.C_CreatureInfo = {
 		GetRaceInfo = function(raceID)
 			if RACES[raceID] then

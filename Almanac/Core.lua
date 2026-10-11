@@ -117,7 +117,8 @@ local function Probe(id)
 		C.ClassName(Player.classFile or ""), tostring(Player.faction)))
 	local quest = Data.Basics(id)
 	if quest then
-		Print(format("%d \"%s\"%s: level %s, requires %d, zone %d (%s), races %d, classes %d, database XP %s",
+		-- Race masks go past 2^31 on Forever, too big for %d.
+		Print(format("%d \"%s\"%s: level %s, requires %d, zone %d (%s), races %.0f, classes %d, database XP %s",
 			id, quest.name, SOURCES[Data.Source(id)] or "", tostring(quest.level),
 			quest.reqLevel, quest.zone, Data.ZoneName(Data.ZoneKey(quest.zone)), quest.races, quest.classes,
 			tostring((Data.BaseXP(id)))))

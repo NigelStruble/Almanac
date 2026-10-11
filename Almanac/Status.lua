@@ -424,8 +424,8 @@ end
 -- "Alliance only", "Horde only", or the races: "Night Elf, Gnome only".
 function Status.RacesText(mask)
 	local names, faction, count = {}, nil, 0
-	for raceID = 1, 32 do
-		if mask and mask > 0 and Data.HasBit(mask, Data.Bit(raceID)) then
+	for _, raceID in ipairs(Data.RaceIDs()) do
+		if mask and mask > 0 and Data.HasBit(mask, Data.RaceBit(raceID)) then
 			count = count + 1
 			names[#names + 1] = C.RaceName(raceID) or (L["race"] .. " " .. raceID)
 			local raceFaction = Data.RaceFaction(raceID) or "?"

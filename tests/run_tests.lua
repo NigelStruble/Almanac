@@ -1250,6 +1250,88 @@ for _, skyborne in ipairs({
 	end)
 end
 
+-- QuestieDB's published race tables, as its Forever build has them.
+local FOREVER_RACES = {
+	raceMaskById = { [1] = 1, [2] = 2, [3] = 4, [4] = 8, [5] = 16, [6] = 32, [7] = 64, [8] = 128, [9] = 256,
+		[10] = 512, [11] = 1024, [95] = 2 ^ 32, [96] = 2 ^ 33 },
+	factionRaceMasks = { Alliance = ALLIANCE + 2 ^ 32, Horde = HORDE + 2 ^ 33 },
+}
+
+-- A quest for one race each, and QuestieDB with or without its race tables.
+local function RaceWorld(env, enum)
+	local world = World()
+	world.quests[1011] = Quest("For Trolls Only", 17, 15, 10, { requiredRaces = 128 })
+	world.quests[1012] = Quest("For High Order Skyborne Only", 12, 15, 10, { requiredRaces = 2 ^ 32 })
+	world.quests[1013] = Quest("For Windshaper Skyborne Only", 17, 15, 10, { requiredRaces = 2 ^ 33 })
+	world.enum = enum
+	env.LibQuestieDB = Mock.QuestieDB(world)
+end
+
+for _, source in ipairs({ { name = "QuestieDB's race tables", enum = FOREVER_RACES }, { name = "Almanac's own" } }) do
+	test("races: other races' quests, with " .. source.name, function()
+		-- An Orc: the Horde's mask keeps the classic races' bits.
+		local client = Start(function(env)
+			RaceWorld(env, source.enum)
+		end, { player = { level = 20, race = 2, class = "WARRIOR", classID = 1, faction = "Horde" } })
+		local ns = client.ns
+		ns.DB.Set("otherRaces", true)
+		ns.Catalog.BuildNow()
+		check(ns.Data.HasBit(ns.Player.factionMask, 2) and ns.Data.HasBit(ns.Player.factionMask, 128),
+			"the Horde's mask has the Orc and Troll bits")
+		check(Contains(ns.Catalog.all, 1011), "an Orc sees a Troll-only quest with the option")
+		check(Contains(ns.Catalog.all, 1013), "and a Windshaper Skyborne one")
+		check(not Contains(ns.Catalog.all, 1012), "but not a High Order Skyborne (Alliance) one")
+		NoErrors(client)
+		-- A Human: the Alliance's Skyborne, and not the Horde's.
+		client = Start(function(env)
+			RaceWorld(env, source.enum)
+		end)
+		ns = client.ns
+		ns.DB.Set("otherRaces", true)
+		ns.Catalog.BuildNow()
+		check(not ns.Data.HasBit(ns.Player.factionMask, 2 ^ 33), "the Alliance's mask has no Windshaper bit")
+		check(Contains(ns.Catalog.all, 1012), "a Human sees a High Order Skyborne quest with the option")
+		check(not Contains(ns.Catalog.all, 1013), "but not a Windshaper one")
+		check(not Contains(ns.Catalog.all, 1011), "or a Troll one")
+		NoErrors(client)
+	end)
+end
+
+test("races: reasons name Forever's Skyborne", function()
+	local client = Start()
+	local Status = client.ns.Status
+	equal(Status.RacesText(1 + 2 ^ 32), "Human, High Order Skyborne only", "a Human and High Order quest")
+	equal(Status.RacesText(2 ^ 33), "Windshaper Skyborne only", "a Windshaper quest")
+	equal(Status.RacesText(ALLIANCE + 2 ^ 32), "Alliance only", "the Alliance's")
+	equal(Status.RacesText(HORDE + 2 ^ 33), "Horde only", "the Horde's")
+	NoErrors(client)
+end)
+
+test("/almanac probe prints a Forever race mask in full", function()
+	local client = Start(function(env)
+		local world = World()
+		world.quests[1014] = Quest("Another Horde Errand", 17, 15, 10, { requiredRaces = HORDE + 2 ^ 33 })
+		env.LibQuestieDB = Mock.QuestieDB(world)
+	end)
+	client.env.SlashCmdList.ALMANAC("probe 1014")
+	local text = table.concat(client.state.chat, "\n")
+	check(text:find("races 8589934770,", 1, true), "the whole mask, not -2147483648: %s", text)
+	NoErrors(client)
+end)
+
+test("Forever's new dungeons stay dungeons once QuestieDB has their quests", function()
+	local client = Start(function(env)
+		local world = World()
+		world.quests[96395] = Quest("An Ancient Grudge", 16919, 15, 10, { requiredRaces = 0 })
+		env.LibQuestieDB = Mock.QuestieDB(world)
+	end)
+	Open(client)
+	equal(#client.ns.NewQuests.Ids(), 0, "no quests from Almanac's list")
+	local thanes = client.ns.Catalog.zones[16919]
+	equal(thanes and thanes.group, "dungeon", "The Hall of Thanes is still a dungeon")
+	NoErrors(client)
+end)
+
 test("Forever Dungeon Journal: its rewards, tooltips and /almanac probe", function()
 	local client = Start(Journal)
 	local frame = Open(client)

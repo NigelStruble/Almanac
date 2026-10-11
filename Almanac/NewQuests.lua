@@ -20,8 +20,6 @@ local _G = _G
 local type, pairs, ipairs, tonumber, floor, sort, format =
 	type, pairs, ipairs, tonumber, math.floor, table.sort, string.format
 
--- Classic races plus Forever's Skyborne (bits 32/33), as QuestieDB's Forever masks.
-local FACTION_RACES = { Alliance = 77 + 2 ^ 32, Horde = 178 + 2 ^ 33 }
 local CLASS_IDS = { WARRIOR = 1, PALADIN = 2, HUNTER = 3, ROGUE = 4, PRIEST = 5, SHAMAN = 7, MAGE = 8, WARLOCK = 9, DRUID = 11 }
 -- Dungeons only the journal knows get zone keys of their own, from here up.
 local MADE_UP = 9000000
@@ -72,7 +70,8 @@ local function LoadOwn(list, exists)
 				name = q.name,
 				level = q.level,
 				reqLevel = q.req or 0,
-				races = FACTION_RACES[q.side] or 0,
+				-- One faction's races, as QuestieDB's quests for it have them.
+				races = q.side and Data.FactionMask(q.side) or 0,
 				classes = 0,
 				zone = q.zone or 0,
 				repeatable = false,
@@ -161,7 +160,7 @@ local function JournalQuest(fdj, q, zone)
 		name = q.name,
 		level = type(q.level) == "number" and q.level or nil,
 		reqLevel = type(q.requires) == "number" and q.requires or 0,
-		races = FACTION_RACES[q.faction] or 0,
+		races = type(q.faction) == "string" and Data.FactionMask(q.faction) or 0,
 		classes = classes and Data.Bit(classes) or 0,
 		zone = zone,
 		repeatable = false,
