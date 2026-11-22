@@ -570,6 +570,8 @@ function Mock.QuestieDB(world)
 				subZoneToParentZoneOverride = "return {}",
 				uiMapIdToAreaId = "return " .. (world.uiMapsSource or "{}"),
 				uiMapIdToAreaIdOverride = "return {}",
+				areaIdToUiMapId = "return " .. (world.areaMapsSource or "{}"),
+				areaIdToUiMapIdOverride = "return {}",
 			},
 		},
 	}

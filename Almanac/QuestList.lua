@@ -908,10 +908,8 @@ function prototype:Refresh(toTop)
 		local zone = Catalog.zones[self.zoneKey]
 		ids = zone and zone.quests or {}
 		local sub = {}
-		for _, group in ipairs(Data.GROUPS) do
-			if zone and group.key == zone.group then
-				sub[#sub + 1] = group.name
-			end
+		if zone then
+			sub[#sub + 1] = Data.GroupName(zone.group)
 		end
 		if zone and zone.low then
 			sub[#sub + 1] = zone.low == zone.high and format(L["level %d"], zone.low) or format(L["levels %d-%d"], zone.low, zone.high)

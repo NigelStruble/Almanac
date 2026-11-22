@@ -14,29 +14,41 @@ local Data = {}
 ns.Data = Data
 
 local _G = _G
-local type, pairs, ipairs, pcall, next = type, pairs, ipairs, pcall, next
-local floor = math.floor
+local type, pairs, ipairs, pcall, next, tonumber = type, pairs, ipairs, pcall, next, tonumber
+local floor, sort = math.floor, table.sort
 
 -- The QuestieDB contract Almanac is written against (QuestieDB checks the range).
 local CONTRACT = 2
 
 local QuestDB, ItemDB, NpcDB, ObjectDB
 
+-- Worked out from the database once it is read; Data.Init starts them afresh.
+local basics = {} -- [questID] = the quest's record (Data.Basics), or false
+local unplaced = {} -- [area ID] = where an area none of the zone lists know goes
+local dungeonByName -- [normalized name] = a dungeon's zone key
+
 --------------------------------------------------------------------------------
 -- Zones, dungeons and categories
 --------------------------------------------------------------------------------
 
--- Zones by continent (AreaTable IDs). Cities count as zones.
+-- Zones by continent (AreaTable IDs). Cities count as zones. Zones not here
+-- go where Questie's quest journal puts them (QuestieGroup below), so zones
+-- QuestieDB adds find their place without an update to Almanac.
 local EASTERN_KINGDOMS = {
 	1, 3, 4, 8, 10, 11, 12, 25, 28, 33, 36, 38, 40, 41, 44, 45, 46, 47, 51, 85,
 	130, 139, 267, 1497, 1519, 1537, 2257,
+	16591, -- Riverglades (WoW: Forever)
 }
 local KALIMDOR = {
 	14, 15, 16, 17, 141, 148, 215, 331, 357, 361, 400, 405, 406, 440, 490, 493,
 	618, 1377, 1637, 1638, 1657,
+	616, 16651, -- Mount Hyjal and Shen'dralas (WoW: Forever)
 }
 local RAIDS = { 1977, 2159, 2677, 2717, 3428, 3429, 3456 }
-local BATTLEGROUNDS = { 2597, 3277, 3358 }
+local BATTLEGROUNDS = {
+	2597, 3277, 3358,
+	16606, -- Darkspear Islands (WoW: Forever)
+}
 -- In QuestieDB's dungeon list, but not dungeons.
 local NOT_DUNGEONS = { 2257, 2917, 2918 }
 
@@ -48,12 +60,15 @@ local function Set(list)
 	return set
 end
 
-local continentOf = {}
+-- [area ID] = the group it is listed in: the continents, and WoW: Forever's
+-- Zephras Isle, an island of its own (the Skyborne's first zone), and the
+-- "Crafting" area its writ quests are filed under.
+local groupOf = { [16593] = "zephras", [16941] = "profession" }
 for _, id in ipairs(EASTERN_KINGDOMS) do
-	continentOf[id] = "ek"
+	groupOf[id] = "ek"
 end
 for _, id in ipairs(KALIMDOR) do
-	continentOf[id] = "kalimdor"
+	groupOf[id] = "kalimdor"
 end
 local isRaid, isBattleground, notDungeon = Set(RAIDS), Set(BATTLEGROUNDS), Set(NOT_DUNGEONS)
 
@@ -112,10 +127,12 @@ local SORTS = {
 	[-676] = { "other", L["Night Elf"] },
 }
 
--- The groups of the zone list, in order.
+-- The groups of the zone list, in order. A continent Questie has and Almanac
+-- does not gets a group of its own, after these continents (Data.GroupName).
 Data.GROUPS = {
 	{ key = "ek", name = L["Eastern Kingdoms"] },
 	{ key = "kalimdor", name = L["Kalimdor"] },
+	{ key = "zephras", name = L["Zephras Isle"] },
 	{ key = "dungeon", name = L["Dungeons"] },
 	{ key = "raid", name = L["Raids"] },
 	{ key = "pvp", name = L["Battlegrounds"] },
@@ -267,6 +284,8 @@ local function LoadSupport(lib)
 	Data.dungeons = type(private.dungeons) == "table" and private.dungeons or {}
 	Data.subZones = Merge(Parse(private.subZoneToParentZone), Parse(private.subZoneToParentZoneOverride))
 	Data.uiMapToArea = Merge(Parse(private.uiMapIdToAreaId), Parse(private.uiMapIdToAreaIdOverride))
+	-- Which map an area is drawn on (QuestieDB's Forever build has it).
+	Data.areaToUiMap = Merge(Parse(private.areaIdToUiMapId), Parse(private.areaIdToUiMapIdOverride))
 	Data.instanceToArea = Parse(zones.instanceIdToAreaId or private.instanceIdToAreaId)
 
 	-- A dungeon's quests can be filed under one of its other areas (Zul'Farrak's
@@ -313,6 +332,9 @@ function Data.Init()
 			Data.dungeonOf[key] = key
 		end
 	end
+	-- Records read while the new quests were loading are read again, now
+	-- that every dungeon is known.
+	basics, unplaced, dungeonByName = {}, {}, nil
 	Data.ready = true
 	Data.problem = nil
 	return true
@@ -394,10 +416,56 @@ function Data.Source(id)
 	return quest and quest.origin or "questie"
 end
 
-local basics = {}
+-- The zone QuestieDB files a quest under (its zoneOrSort), 0 for none.
+function Data.FiledZone(id)
+	local zone = Read(QuestDB, id, "zoneOrSort")
+	return type(zone) == "number" and zone or 0
+end
+
+-- The area an NPC or object stands in, or nil.
+local function Home(entity, id)
+	local zone = Read(entity, id, "zoneID")
+	if type(zone) == "number" and zone > 0 then
+		return zone
+	end
+	local spawns = Read(entity, id, "spawns")
+	zone = type(spawns) == "table" and next(spawns)
+	return type(zone) == "number" and zone > 0 and zone or nil
+end
+
+-- Where a quest QuestieDB files under no zone is listed: the dungeon Almanac's
+-- list or the journal puts it in (NewQuests.lua), else where its quest giver
+-- stands, else where it is turned in. 0 when none of them says.
+local function UnfiledZone(id)
+	local newQuests = ns.NewQuests
+	local zone = newQuests and newQuests.ZoneFor and newQuests.ZoneFor(id)
+	if zone then
+		return zone
+	end
+	for _, field in ipairs({ "startedBy", "finishedBy" }) do
+		local who = Read(QuestDB, id, field)
+		if type(who) == "table" then
+			for _, npc in ipairs(type(who[1]) == "table" and who[1] or {}) do
+				zone = Home(NpcDB, npc)
+				if zone then
+					return zone
+				end
+			end
+			for _, object in ipairs(type(who[2]) == "table" and who[2] or {}) do
+				zone = Home(ObjectDB, object)
+				if zone then
+					return zone
+				end
+			end
+		end
+	end
+	return 0
+end
 
 -- What the quest list is built from: { id, name, level, reqLevel, races,
--- classes, zone (as QuestieDB files it), repeatable }. Nil for an unknown quest.
+-- classes, zone, repeatable }. zone is where QuestieDB files the quest, or
+-- for one it files under no zone, where Almanac lists it (UnfiledZone). Nil
+-- for an unknown quest.
 function Data.Basics(id)
 	local quest = basics[id]
 	if quest ~= nil then
@@ -413,6 +481,7 @@ function Data.Basics(id)
 	local reqLevel = Read(QuestDB, id, "requiredLevel") or 0
 	local special = Read(QuestDB, id, "specialFlags") or 0
 	local flags = Read(QuestDB, id, "questFlags") or 0
+	local zone = Data.FiledZone(id)
 	quest = {
 		id = id,
 		name = name,
@@ -421,7 +490,7 @@ function Data.Basics(id)
 		reqLevel = reqLevel,
 		races = Read(QuestDB, id, "requiredRaces") or 0,
 		classes = Read(QuestDB, id, "requiredClasses") or 0,
-		zone = Read(QuestDB, id, "zoneOrSort") or 0,
+		zone = zone ~= 0 and zone or UnfiledZone(id),
 		-- specialFlags 1: repeatable; questFlags 4096, 32768: daily, weekly.
 		repeatable = special % 2 == 1 or floor(flags / 4096) % 2 == 1 or floor(flags / 32768) % 2 == 1,
 	}
@@ -538,11 +607,154 @@ function Data.NewQuestRewards(id)
 end
 
 --------------------------------------------------------------------------------
+-- Questie
+--------------------------------------------------------------------------------
+
+-- Questie knows more than QuestieDB publishes: the quests it hides
+-- (duplicates, quests that are not in the game, world event quests out of
+-- season), which event quests are in season, and where its quest journal
+-- files each zone. That is not part of Questie's public API, so it is only
+-- used while it looks as expected, once Questie says it is ready.
+local modules = {}
+
+function Data.QuestieModule(name)
+	if modules[name] then
+		return modules[name]
+	end
+	local questie, loader = _G.Questie, _G.QuestieLoader
+	if type(questie) ~= "table" or type(loader) ~= "table" or type(loader.ImportModule) ~= "function" then
+		return nil
+	end
+	if type(questie.API) == "table" and not questie.API.isReady then
+		return nil
+	end
+	local ok, module = pcall(loader.ImportModule, loader, name)
+	if ok and type(module) == "table" then
+		modules[name] = module
+		return module
+	end
+	return nil
+end
+
+-- The categories of Questie's journal (its l10n.zoneCategoryLookup) as
+-- Almanac's groups. Its Events are left out, as Almanac's World Events group
+-- marks its quests out of season, and so are Class, Pet Battle and Scenarios.
+-- Any other category is a continent Almanac has no group for, and gets one.
+local QUESTIE_GROUPS = { [1] = "ek", [2] = "kalimdor", [8] = "zephras", [9] = "dungeon", [10] = "pvp", [12] = "profession" }
+local QUESTIE_SKIPPED = { [11] = true, [13] = true, [14] = true, [15] = true }
+
+local questieZones -- [area ID] = the category Questie's journal files it under
+
+local function QuestieZones()
+	if questieZones then
+		return questieZones
+	end
+	local l10n = Data.QuestieModule("l10n")
+	local lookup = l10n and l10n.zoneCategoryLookup
+	if type(lookup) ~= "table" then
+		return nil
+	end
+	-- In order, so an area in a continent and in Dungeons goes under Dungeons.
+	local categories = {}
+	for category, list in pairs(lookup) do
+		if type(category) == "number" and type(list) == "table" and not QUESTIE_SKIPPED[category] then
+			categories[#categories + 1] = category
+		end
+	end
+	sort(categories)
+	local zones = {}
+	for _, category in ipairs(categories) do
+		for area in pairs(lookup[category]) do
+			if type(area) == "number" and area > 0 then
+				zones[area] = category
+			end
+		end
+	end
+	questieZones = zones
+	return zones
+end
+
+-- The group Questie's journal puts an area in, or nil.
+local function QuestieGroup(area)
+	local zones = QuestieZones()
+	local category = zones and zones[area]
+	return category and (QUESTIE_GROUPS[category] or ("questie" .. category)) or nil
+end
+
+-- A group's name: Almanac's, or for a continent only Questie has, Questie's.
+function Data.GroupName(key)
+	for _, group in ipairs(Data.GROUPS) do
+		if group.key == key then
+			return group.name
+		end
+	end
+	local category = type(key) == "string" and tonumber(key:match("^questie(%d+)$"))
+	local l10n = category and Data.QuestieModule("l10n")
+	if not l10n then
+		return L["Other"]
+	end
+	local name = type(l10n.continentLookup) == "table" and l10n.continentLookup[category]
+	if type(name) ~= "string" then
+		return L["Other"]
+	end
+	-- Questie translates its names by calling its l10n module.
+	local ok, translated = pcall(function()
+		return l10n(name)
+	end)
+	return ok and type(translated) == "string" and translated or name
+end
+
+--------------------------------------------------------------------------------
 -- Zones
 --------------------------------------------------------------------------------
 
+-- Whether an area is in a group of Almanac's own lists, or of Questie's.
+local function Placed(area)
+	return isRaid[area] or isBattleground[area] or groupOf[area] or QuestieGroup(area) ~= nil
+end
+
+-- A dungeon's zone key by its name ("The Hall of Thanes", or the name the game
+-- gives its instance): QuestieDB's dungeons, and the new ones (NewQuests.lua).
+local function DungeonByName(name)
+	local newQuests = ns.NewQuests
+	if not (newQuests and Data.ready and type(name) == "string") then
+		return nil
+	end
+	if not dungeonByName then
+		dungeonByName = {}
+		local function Add(text, key)
+			local normal = newQuests.Normal(text)
+			if normal ~= "" and not dungeonByName[normal] then
+				dungeonByName[normal] = key
+			end
+		end
+		for key, known in pairs(newQuests.Dungeons()) do
+			Add(C.AreaName(key), key)
+			Add(known, key)
+		end
+		-- The lowest area first: the dungeon, not a later copy of it
+		-- (Scholomance 2057, not 6066).
+		local areas = {}
+		for areaID in pairs(Data.dungeons or {}) do
+			if Data.dungeonOf[areaID] then
+				areas[#areas + 1] = areaID
+			end
+		end
+		sort(areas)
+		for _, areaID in ipairs(areas) do
+			local entry = Data.dungeons[areaID]
+			Add(C.AreaName(areaID), Data.dungeonOf[areaID])
+			Add(type(entry) == "table" and entry[1], Data.dungeonOf[areaID])
+		end
+	end
+	return dungeonByName[newQuests.Normal(name)]
+end
+
 -- Where a quest is listed: its dungeon, or its zone (not a subzone such as
--- Northshire Valley, which goes under Elwynn Forest), or its category.
+-- Northshire Valley, which goes under Elwynn Forest), or its category. An area
+-- none of the lists know is a dungeon's when it has the dungeon's name (WoW:
+-- Forever's second City of Dalaran area), else part of the zone whose map it
+-- is drawn on (The Shaper's Terrace, on Un'Goro Crater's).
 function Data.ZoneKey(zone)
 	if type(zone) ~= "number" or zone == 0 then
 		return 0
@@ -554,11 +766,29 @@ function Data.ZoneKey(zone)
 	if dungeons[zone] then
 		return dungeons[zone]
 	end
-	local parent = Data.subZones and Data.subZones[zone]
+	local subZones = Data.subZones or {}
+	local parent = subZones[zone]
 	if type(parent) == "number" and parent > 0 then
 		return dungeons[parent] or parent
 	end
-	return zone
+	if not Data.ready or Placed(zone) then
+		return zone
+	end
+	local key = unplaced[zone]
+	if not key then
+		key = DungeonByName(C.AreaName(zone))
+		if not key then
+			key = zone
+			local map = Data.areaToUiMap and Data.areaToUiMap[zone]
+			local area = type(map) == "number" and map > 0 and Data.uiMapToArea and Data.uiMapToArea[map]
+			if type(area) == "number" and area > 0 and area ~= zone then
+				parent = subZones[area]
+				key = dungeons[area] or (type(parent) == "number" and parent > 0 and (dungeons[parent] or parent)) or area
+			end
+		end
+		unplaced[zone] = key
+	end
+	return key
 end
 
 -- Which group of the zone list a zone key goes in.
@@ -574,7 +804,7 @@ function Data.ZoneGroup(key)
 	elseif Data.dungeonOf and Data.dungeonOf[key] == key then
 		return "dungeon"
 	end
-	return continentOf[key] or "other"
+	return groupOf[key] or QuestieGroup(key) or "other"
 end
 
 -- The class a class category is for ("MAGE"), or nil.
@@ -615,29 +845,9 @@ function Data.ZoneName(key)
 	return L["Zone"] .. " " .. key
 end
 
--- A dungeon's zone key by its name ("The Hall of Thanes"), for dungeons
--- QuestieDB cannot place by their instance.
-local function DungeonByName(name)
-	local newQuests = ns.NewQuests
-	if not newQuests or type(name) ~= "string" then
-		return nil
-	end
-	local wanted = newQuests.Normal(name)
-	for key, known in pairs(newQuests.Dungeons()) do
-		if newQuests.Normal(known) == wanted then
-			return key
-		end
-	end
-	for areaID, entry in pairs(Data.dungeons or {}) do
-		if type(entry) == "table" and newQuests.Normal(entry[1]) == wanted and Data.dungeonOf[areaID] then
-			return Data.dungeonOf[areaID]
-		end
-	end
-	return nil
-end
-
--- The zone key for where the character is now: the dungeon when inside one,
--- else the zone of the map the game shows for the character.
+-- The zone key for where the character is now: the dungeon when inside one
+-- (by its name for a dungeon QuestieDB cannot place by its instance), else
+-- the zone of the map the game shows for the character.
 function Data.PlayerZoneKey()
 	local instanceID, _, instanceName = C.Instance()
 	if instanceID and Data.instanceToArea then

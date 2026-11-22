@@ -14,11 +14,14 @@ the quests that give one.
 ## Features
 
 - **Every zone, dungeon and raid.** The zones of the Eastern Kingdoms and
-  Kalimdor in level order, then dungeons, raids, battlegrounds, your class's
-  quests, profession quests and world events. Each shows its level range and
-  how many quests you can take now. Starting areas such as Northshire Valley
-  are part of their zone, and a dungeon lists every quest for it, wherever
-  the quest giver stands.
+  Kalimdor in level order (WoW: Forever's Riverglades, Mount Hyjal and
+  Shen'dralas among them), Zephras Isle, then dungeons, raids, battlegrounds,
+  your class's quests, profession quests and world events. Each shows its
+  level range and how many quests you can take now. Starting areas such as
+  Northshire Valley are part of their zone, and a dungeon lists every quest
+  for it, wherever the quest giver stands. A zone that QuestieDB adds later
+  goes where Questie's quest journal puts it, and a quest QuestieDB files
+  under no zone is listed where its quest giver stands.
 - **Available, Unavailable, Completed.** Every quest is in one of the three:
   - **Available:** you can take it now, or it is in your quest log (marked
     when it is ready to turn in), or all it waits for is the quests before it
@@ -56,8 +59,11 @@ the quests that give one.
   Lordaeron), its new Deadmines quest, and the quests that lead to them or
   follow them, such as Toxic Soil in Westfall: 32 quests, with the XP they
   give on Forever. The game supplies their money and rewards. Each drops out
-  by itself once QuestieDB adds it. If Forever Dungeon Journal is installed,
-  Almanac also lists any new dungeon quest it knows that Almanac's list lacks.
+  by itself once QuestieDB adds it. It also lists the quests of The Drowned
+  City, Krol'dok Stronghold, Alcaz Prison and Blackmaw Hold under their
+  dungeons, where QuestieDB files them under no zone yet. If Forever Dungeon
+  Journal is installed, Almanac also lists any new dungeon quest it knows that
+  Almanac's list lacks.
 - **Reward search.** Search every quest reward by slot, armor or weapon type,
   stat, quality and level, and see which quest gives each item, from what
   level, and whether you can do it. It lists the rewards of the quests you
@@ -74,7 +80,7 @@ the quests that give one.
 
 | Game | Folder | Interface |
 |---|---|---|
-| WoW: Forever | `_classic_beta_` (beta) | 16001 |
+| WoW: Forever | `_forever_` | 16001 |
 
 ## Requirements
 
@@ -82,7 +88,9 @@ Almanac reads its quests from **QuestieDB**, the quest database that comes
 with [Questie](https://www.curseforge.com/wow/addons/questie). Install Questie
 and keep its QuestieDB addon turned on. When Questie itself is on, Almanac
 also leaves out the quests Questie hides: quests that are not in the game,
-duplicates, and world event quests out of season.
+duplicates, and world event quests out of season. It also files a zone its
+own lists lack where Questie's quest journal does, so new zones find their
+continent, or a group of their own, without an update to Almanac.
 
 The new dungeon quests Forever added that QuestieDB does not have yet, and the
 quests around them, come with Almanac (`ForeverQuests.lua`). Its facts were
@@ -98,7 +106,7 @@ quest the journal knows that its own list lacks.
 
 1. Install Questie (see above).
 2. Copy the `Almanac` folder into the game's AddOns folder, for example
-   `World of Warcraft\_classic_beta_\Interface\AddOns\Almanac`, and restart the
+   `World of Warcraft\_forever_\Interface\AddOns\Almanac`, and restart the
    game (a new addon is only found at start-up, not by `/reload`).
 
 ## Using it
@@ -226,8 +234,9 @@ lua5.1 tests/run_tests.lua
 
 The tests use a small made-up quest database. If QuestieDB is installed, they
 also load it and run Almanac against the real quests (and say which of
-Almanac's new Forever quests QuestieDB has now), and with Forever Dungeon
-Journal too if it is installed (saying what it adds); set
+Almanac's new Forever quests QuestieDB has now), with Forever Dungeon Journal
+too if it is installed (saying what it adds), and with Questie's zone table if
+Questie is installed (saying what is left under Other); set
 `ALMANAC_WOW_ADDONS` to the AddOns folder if it is not in the usual place.
 
 When Forever adds or changes quests QuestieDB does not have yet, update

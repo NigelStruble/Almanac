@@ -134,16 +134,23 @@ local AREA_NAMES = {
 	[12] = "Elwynn Forest", [9] = "Northshire Valley", [40] = "Westfall", [1581] = "The Deadmines",
 	[718] = "Wailing Caverns", [17] = "The Barrens", [1519] = "Stormwind City", [1] = "Dun Morogh",
 	[16919] = "The Hall of Thanes", [1537] = "Ironforge", [1497] = "Undercity",
+	-- WoW: Forever's new zones, and areas the zone lists do not know: a second
+	-- City of Dalaran, and The Shaper's Terrace on Un'Goro Crater's map.
+	[16591] = "Riverglades", [616] = "Mount Hyjal", [16651] = "Shen'dralas", [16593] = "Zephras Isle",
+	[16606] = "Darkspear Islands", [16941] = "Crafting", [16544] = "City of Dalaran", [16560] = "City of Dalaran",
+	[16985] = "The Shaper's Terrace", [490] = "Un'Goro Crater",
 }
 
 -- Forever Dungeon Journal's data, as its ForeverDungeonJournal_NS global has
 -- it: quests QuestieDB lacks (a new dungeon, a new Deadmines quest and the
 -- chain before it), and one it has (Red Silk Bandanas), which is left alone.
+-- Its dungeons have bosses; its other entries (an item, an attunement) none.
 local function Journal(env)
 	local bullet = " \226\128\162 "
 	env.ForeverDungeonJournal_NS = {
 		DB = {
 			["Hall of Thanes"] = {
+				bosses = { { name = "Faldrim Anvilmar" } },
 				quests = {
 					{ id = 96395, liveXPFallback = 3570, name = "An Ancient Grudge", level = 15, requires = 10, faction = "Both",
 						pickup = "Ghostly Attendant, inside Hall of Thanes", turnin = "Ghostly Attendant, inside the dungeon",
@@ -157,6 +164,7 @@ local function Journal(env)
 				},
 			},
 			["The Deadmines"] = {
+				bosses = { { name = "Edwin VanCleef" } },
 				quests = {
 					{ id = 214, liveXPFallback = 4688, name = "Red Silk Bandanas", level = 17, requires = 14, faction = "Alliance",
 						rewardItems = {} },
@@ -165,6 +173,7 @@ local function Journal(env)
 				},
 			},
 			["Ruins of Lordaeron"] = {
+				bosses = { { name = "The Baron" } },
 				quests = {
 					{ id = 97288, liveXPFallback = 5300, name = "Unending Torment", level = 21, requires = 16, faction = "Horde",
 						rewardItems = {} },
@@ -1194,6 +1203,7 @@ test("Forever Dungeon Journal: factions, and a dungeon only it knows", function(
 	local client = Start(function(env)
 		Journal(env)
 		env.ForeverDungeonJournal_NS.DB["Stonetalon Hideaway"] = {
+			bosses = { { name = "Hideaway Warden" } },
 			quests = { { id = 99001, name = "Into the Hideaway", level = 24, requires = 18, faction = "Both", rewardItems = {} } },
 		}
 	end, { player = { level = 20, race = 2, class = "WARRIOR", classID = 1, faction = "Horde" } })
@@ -1332,6 +1342,204 @@ test("Forever's new dungeons stay dungeons once QuestieDB has their quests", fun
 	NoErrors(client)
 end)
 
+--------------------------------------------------------------------------------
+-- WoW: Forever's zones
+--------------------------------------------------------------------------------
+
+-- Quests in Forever's new zones, and in areas none of the zone lists know.
+local function ForeverZones(env)
+	local world = World()
+	world.quests[2101] = Quest("A Message in Blood", 16591, 36, 35)
+	world.quests[2102] = Quest("The Staff of the Mountain", 616, 57, 54)
+	world.quests[2103] = Quest("Valley of Bones", 16651, 40, 30)
+	world.quests[2104] = Quest("Coming of Age", 16593, 1, 1, { requiredRaces = 0 })
+	world.quests[2105] = Quest("Conflict at Darkspear Islands", 16606, 39, 30)
+	world.quests[2106] = Quest("Craftsman's Writ: Elixir of Wisdom", 16941, 60, 1, { requiredRaces = 0 })
+	-- Drawn on Un'Goro Crater's map; and a second City of Dalaran area.
+	world.quests[2107] = Quest("Panic at the Digsite", 16985, 60, 55)
+	world.quests[2108] = Quest("Unstable Magic", 16560, 60, 48)
+	world.quests[2109] = Quest("Dalaran's Own", 16544, 30, 28)
+	world.dungeons[16544] = { "City of Dalaran", nil, 36, {} }
+	world.areaMapsSource = "{ [16985] = 1449 }"
+	world.uiMapsSource = "{ [1429] = 12, [1436] = 40, [1426] = 1, [1449] = 490 }"
+	env.LibQuestieDB = Mock.QuestieDB(world)
+end
+
+local function GroupKeys(Catalog)
+	local keys = {}
+	for i, group in ipairs(Catalog.groups) do
+		keys[i] = group.key
+	end
+	return table.concat(keys, ",")
+end
+
+test("zones: Forever's new zones go under their continents", function()
+	local client = Start(ForeverZones)
+	Open(client)
+	local ns = client.ns
+	local Catalog = ns.Catalog
+	local function Group(key)
+		return Catalog.zones[key] and Catalog.zones[key].group
+	end
+	equal(Group(16591), "ek", "Riverglades is in the Eastern Kingdoms")
+	equal(Group(616), "kalimdor", "Mount Hyjal is in Kalimdor")
+	equal(Group(16651), "kalimdor", "and Shen'dralas")
+	equal(Group(16593), "zephras", "Zephras Isle is an island of its own")
+	equal(Group(16606), "pvp", "Darkspear Islands is a battleground")
+	equal(Group(16941), "profession", "the writ quests' Crafting is with the professions")
+	check(GroupKeys(Catalog):find("ek,kalimdor,zephras,dungeon", 1, true), "Zephras Isle after the continents: %s",
+		GroupKeys(Catalog))
+	check(Contains(Catalog.zones[490] and Catalog.zones[490].quests, 2107), "an area on Un'Goro Crater's map is in Un'Goro Crater")
+	check(Contains(Catalog.zones[16544].quests, 2108), "an area with a dungeon's name is that dungeon")
+	check(Catalog.zones[16985] == nil and Catalog.zones[16560] == nil, "and neither is a zone of its own")
+	check(ns.Status.Of(2106) ~= "event", "a writ is no world event")
+	local frame = ns.Window.Frame()
+	frame.quests:ShowZone(16593)
+	equal(frame.quests.sub:GetText():match("^[^·]+"):gsub("%s+$", ""), "Zephras Isle", "the zone page names its group")
+	NoErrors(client)
+end)
+
+-- Questie's quest journal: its zone table, and its names for its continents.
+local function QuestieJournal(env, lookup, continents)
+	local l10n = setmetatable({ zoneCategoryLookup = lookup, continentLookup = continents }, {
+		__call = function(_, text)
+			return text
+		end,
+	})
+	env.QuestieLoader = {
+		ImportModule = function(_, name)
+			return name == "l10n" and l10n or nil
+		end,
+	}
+	env.Questie = { API = { isReady = true, RegisterOnReady = function(callback)
+		callback()
+	end } }
+end
+
+test("zones: zones Almanac does not know go where Questie's journal puts them", function()
+	local client = Start(function(env)
+		local world = World()
+		world.quests[2201] = Quest("A New Shore", 17001, 30, 25)
+		world.quests[2202] = Quest("Into the New Dungeon", 17002, 30, 25)
+		world.quests[2203] = Quest("Far Away", 17003, 30, 25)
+		world.quests[2204] = Quest("Festival Errand", 17004, 30, 25)
+		world.quests[2205] = Quest("A Craft Anew", 17005, 30, 25)
+		-- Almanac's own list wins: Questie files Riverglades elsewhere here.
+		world.quests[2206] = Quest("Riverglades Errand", 16591, 36, 35)
+		env.LibQuestieDB = Mock.QuestieDB(world)
+		QuestieJournal(env, {
+			[1] = { [17001] = "A New Shore" },
+			[2] = { [16591] = "Riverglades" },
+			[9] = { [17002] = "The New Dungeon" },
+			[12] = { [17005] = "New Crafts" },
+			[13] = { [17004] = "New Festival" },
+			[16] = { [17003] = "Far Away" },
+		}, { [16] = "Isles of Tomorrow" })
+	end)
+	Open(client)
+	local ns = client.ns
+	local Catalog = ns.Catalog
+	local function Group(key)
+		return Catalog.zones[key] and Catalog.zones[key].group
+	end
+	equal(Group(17001), "ek", "a continent's zone")
+	equal(Group(17002), "dungeon", "a dungeon")
+	equal(Group(17005), "profession", "a profession's")
+	equal(Group(17004), "other", "Questie's events are not Almanac's world events")
+	check(ns.Status.Of(2204) ~= "event", "so its quests are not out of season")
+	equal(Group(16591), "ek", "Almanac's own lists come first")
+	equal(Group(17003), "questie16", "a continent Almanac has no group for gets one")
+	equal(ns.Data.GroupName("questie16"), "Isles of Tomorrow", "named as Questie names it")
+	check(GroupKeys(Catalog):find("ek,questie16,dungeon", 1, true), "after the continents: %s", GroupKeys(Catalog))
+	local found
+	for _, group in ipairs(Catalog.groups) do
+		found = found or (group.key == "questie16" and group.name)
+	end
+	equal(found, "Isles of Tomorrow", "the zone list's name for it")
+	NoErrors(client)
+end)
+
+test("zones: quests QuestieDB files under no zone go where their quest giver is", function()
+	local client = Start(function(env)
+		local world = World()
+		world.npcs[3001] = { name = "Krom'rosh", zoneID = 16591, spawns = { [16591] = { { 41, 52 } } } }
+		world.npcs[3002] = { name = "Wanderer", spawns = { [12] = { { 30, 40 } } } }
+		world.quests[2301] = Quest("Food for the Taking", 0, 36, 35, { startedBy = { { 3001 } } })
+		world.quests[2302] = Quest("A Wanderer's Errand", 0, 8, 5, { startedBy = { { 3002 } } })
+		world.quests[2303] = Quest("Report to Gryan", 0, 15, 10, { finishedBy = { { 234 } } })
+		world.quests[2304] = Quest("Nobody's Errand", 0, 15, 10)
+		env.LibQuestieDB = Mock.QuestieDB(world)
+	end)
+	Open(client)
+	local ns = client.ns
+	local Catalog = ns.Catalog
+	check(Contains(Catalog.zones[16591] and Catalog.zones[16591].quests, 2301), "where its giver stands")
+	check(Contains(Catalog.zones[12].quests, 2302), "where its giver is found, when the giver has no zone")
+	check(Contains(Catalog.zones[40].quests, 2303), "else where it is turned in")
+	check(Contains(Catalog.zones[0] and Catalog.zones[0].quests, 2304), "else under Unknown zone")
+	equal(ns.Data.FiledZone(2301), 0, "QuestieDB's own filing is kept apart")
+	client.env.SlashCmdList.ALMANAC("probe 2301")
+	check(table.concat(client.state.chat, "\n"):find("QuestieDB files it under no zone", 1, true), "/almanac probe says so")
+	NoErrors(client)
+end)
+
+test("Forever's new dungeons: their quests QuestieDB files under no zone", function()
+	local client = Start(function(env)
+		local world = World()
+		world.quests[92065] = Quest("Blackmaw Reclamation", 0, 60, 47)
+		world.quests[95262] = Quest("The Secret Prison", 0, 53, 48)
+		-- Filed by QuestieDB: it stays where QuestieDB puts it.
+		world.quests[94969] = Quest("Krol'dok No More!", 16591, 42, 40)
+		env.LibQuestieDB = Mock.QuestieDB(world)
+	end, { forever = true })
+	Open(client)
+	local ns = client.ns
+	local Catalog = ns.Catalog
+	local hold = Catalog.zones[16554]
+	equal(hold and hold.group, "dungeon", "Blackmaw Hold is a dungeon")
+	equal(hold and hold.name, "Blackmaw Hold", "named by Almanac's list when the game has no name")
+	check(Contains(hold and hold.quests, 92065), "with its quest")
+	check(Contains(Catalog.zones[16620] and Catalog.zones[16620].quests, 95262), "Alcaz Prison's")
+	check(Contains(Catalog.zones[16591].quests, 94969), "a quest QuestieDB files under a zone stays there")
+	check(Catalog.zones[16842] == nil, "so Krol'dok Stronghold has none here")
+	client.state.instance, client.state.instanceName = 3001, "Blackmaw Hold"
+	equal(ns.Data.PlayerZoneKey(), 16554, "inside Blackmaw Hold")
+	NoErrors(client)
+end)
+
+test("Forever Dungeon Journal: its dungeons take QuestieDB's quests with no zone", function()
+	local client = Start(function(env)
+		local world = World()
+		world.quests[99101] = Quest("Into the Deep Hold", 0, 56, 50)
+		world.quests[99102] = Quest("Rest in the Bag", 0, 20, 14, { finishedBy = { { 234 } } })
+		world.quests[99104] = Quest("Armory Errand", 0, 36, 30)
+		world.dungeons[796] = { "Scarlet Monastery", nil, 85, {} }
+		env.LibQuestieDB = Mock.QuestieDB(world)
+		Journal(env)
+		local db = env.ForeverDungeonJournal_NS.DB
+		db["Deep Hold"] = { bosses = { { name = "Deep One" } }, quests = { { id = 99101, name = "Into the Deep Hold" } } }
+		db["Scarlet Monastery: Armory"] = { bosses = { { name = "Herod" } }, quests = { { id = 99104, name = "Armory Errand" } } }
+		-- Not dungeons, and not quests.
+		db["Cozy Sleeping Bag"] = { quests = { { id = 99102, name = "Rest in the Bag" }, { id = 99103, name = "A Nap" } } }
+		db["Mallet of Zul'Farrak"] = { quests = { { id = -97100, name = "Mallet of Zul'Farrak" } } }
+		db["Gnomeregan"] = { bosses = { { name = "Mekgineer Thermaplugg" } }, quests = { { id = 2930001, name = "White Punch Card" } } }
+		env.ForeverDungeonJournal_NS.QUEST_PREREQ_CHAINS[2930005] = { { id = 2930001, name = "White Punch Card" } }
+	end)
+	Open(client)
+	local ns = client.ns
+	local Catalog, Data = ns.Catalog, ns.Data
+	local key = Data.ZoneKey(Data.Basics(99101).zone)
+	check(key > 9000000, "a dungeon only the journal knows: %s", tostring(key))
+	equal(Catalog.zones[key] and Catalog.zones[key].name, "Deep Hold", "named by the journal")
+	equal(Catalog.zones[key] and Catalog.zones[key].group, "dungeon", "as a dungeon")
+	check(Contains(Catalog.zones[796] and Catalog.zones[796].quests, 99104), "a wing's quest goes to its dungeon")
+	check(Contains(Catalog.zones[40].quests, 99102), "an entry with no bosses is no dungeon: the quest goes where it is turned in")
+	equal(Data.Basics(99103), nil, "nor are its quests added")
+	equal(Data.Basics(-97100), nil, "made-up numbers are not quests")
+	equal(Data.Basics(2930001), nil, "nor are punch cards")
+	NoErrors(client)
+end)
+
 test("Forever Dungeon Journal: its rewards, tooltips and /almanac probe", function()
 	local client = Start(Journal)
 	local frame = Open(client)
@@ -1364,6 +1572,7 @@ test("Forever Dungeon Journal: only what Almanac's list lacks", function()
 		local fdj = env.ForeverDungeonJournal_NS
 		fdj.DB["Hall of Thanes"].quests[1].liveXPFallback = 3600
 		fdj.DB["Stonetalon Hideaway"] = {
+			bosses = { { name = "Hideaway Warden" } },
 			quests = { { id = 99001, name = "Into the Hideaway", level = 24, requires = 18, faction = "Both", rewardItems = {} } },
 		}
 	end, { forever = true })
@@ -1526,6 +1735,37 @@ local function LoadJournal(env)
 	return env.ForeverDungeonJournal_NS ~= nil or nil, "Forever Dungeon Journal did not publish its data"
 end
 
+-- Questie's zone table, as Questie's Forever build loads it (its TOC loads
+-- lookupZones.lua alone, with Era's content), if Questie is installed.
+local function LoadQuestieZones(env)
+	local file = RealQuestieDB.Folder() .. "/Questie/Localization/lookups/lookupZones.lua"
+	local chunk = loadfile(file)
+	if not chunk then
+		return nil, "no Questie at " .. RealQuestieDB.Folder()
+	end
+	local modules = {
+		l10n = setmetatable({}, {
+			__call = function(_, text)
+				return text
+			end,
+		}),
+		Expansions = { Era = 1, Tbc = 2, Wotlk = 3, Cata = 4, MoP = 5, Current = 1 },
+	}
+	env.QuestieLoader = {
+		ImportModule = function(_, name)
+			modules[name] = modules[name] or {}
+			return modules[name]
+		end,
+	}
+	env.Questie = { API = { isReady = true } }
+	setfenv(chunk, env)
+	local ok, err = pcall(chunk)
+	if not ok then
+		return nil, err
+	end
+	return type(modules.l10n.zoneCategoryLookup) == "table" or nil, "Questie's zone table has a new shape"
+end
+
 local function RealStart(player, setup)
 	local env, state = Mock.New({ player = player })
 	local ok, why = RealQuestieDB.Load(env)
@@ -1658,20 +1898,44 @@ else
 			local ns = client.ns
 			local Data, Catalog = ns.Data, ns.Catalog
 			Catalog.BuildNow()
-			-- Every quest of the journal's is in QuestieDB, on Almanac's list,
-			-- or added from the journal.
+			-- Every quest of the journal's dungeons is in QuestieDB, on
+			-- Almanac's list, or added from the journal; its made-up numbers
+			-- are not quests.
 			local fdj = client.env.ForeverDungeonJournal_NS
-			local added, keys = {}, {}
-			for _, dungeon in pairs(fdj.DB) do
+			local added, keys, filed = {}, {}, {}
+			for name, dungeon in pairs(fdj.DB) do
+				local isDungeon = type(dungeon) == "table" and type(dungeon.bosses) == "table" and next(dungeon.bosses) ~= nil
 				for _, q in ipairs(type(dungeon) == "table" and dungeon.quests or {}) do
+					local isQuest = q.id > 0 and q.id < 1000000
 					local source = Data.QuestExists(q.id) and "questie" or Data.Source(q.id)
-					check(source == "questie" or Data.Basics(q.id), "%d is listed", q.id)
+					if not isQuest then
+						equal(Data.Basics(q.id), nil, ("%d, %s, is no quest"):format(q.id, tostring(q.name)))
+					elseif isDungeon then
+						check(source == "questie" or Data.Basics(q.id), "%d is listed", q.id)
+					end
 					if source == "journal" and not added[q.id] then
 						added[q.id] = true
 						keys[#keys + 1] = q.id .. " " .. q.name
 					end
+					local key = isQuest and source == "questie" and Data.FiledZone(q.id) == 0
+						and Data.ZoneKey(Data.Basics(q.id).zone)
+					if key then
+						filed[name] = filed[name] or {}
+						filed[name][Data.ZoneName(key)] = (filed[name][Data.ZoneName(key)] or 0) + 1
+					end
 				end
 			end
+			local lines = {}
+			for name, zones in pairs(filed) do
+				local parts = {}
+				for zone, count in pairs(zones) do
+					parts[#parts + 1] = zone .. " " .. count
+				end
+				table.sort(parts)
+				lines[#lines + 1] = name .. " -> " .. table.concat(parts, ", ")
+			end
+			table.sort(lines)
+			print("    its quests QuestieDB files under no zone go to: " .. table.concat(lines, "; "))
 			for _, id in ipairs(ns.NewQuests.Ids()) do
 				if Data.Source(id) == "journal" and not added[id] then
 					added[id] = true
@@ -1687,6 +1951,44 @@ else
 				frame.quests:ShowZone(key)
 			end
 			NoErrors(client)
+		end)
+	end
+
+	journal = nil
+	local orc, noQuestie = RealStart({ level = 20, race = 2, class = "WARRIOR", classID = 1, faction = "Horde" },
+		LoadQuestieZones)
+	if not orc then
+		print("skipped the real Questie zone table test (" .. tostring(noQuestie) .. ")")
+	else
+		test("real Questie: zones go where Questie's journal puts them", function()
+			local ns = orc.ns
+			local Data, Catalog = ns.Data, ns.Catalog
+			Catalog.BuildNow()
+			-- Only Questie's table has these two.
+			equal(Data.ZoneGroup(9), "ek", "Northshire Valley")
+			equal(Data.ZoneGroup(1941), "dungeon", "Caverns of Time")
+			-- Almanac's lists and Questie's agree on Forever's new zones.
+			for area, group in pairs({ [16591] = "ek", [616] = "kalimdor", [16651] = "kalimdor", [16593] = "zephras",
+				[16606] = "pvp", [16941] = "profession" }) do
+				equal(Data.ZoneGroup(area), group, "area " .. area)
+			end
+			local groups, others = {}, {}
+			for _, group in ipairs(Catalog.groups) do
+				groups[#groups + 1] = group.key .. ":" .. #group.zones
+				if group.key == "other" or group.key:match("^questie") then
+					for _, zone in ipairs(group.zones) do
+						others[#others + 1] = ("%s(%d):%d"):format(zone.name, zone.key, #zone.quests)
+					end
+				end
+			end
+			print("    an Orc Warrior's groups: " .. table.concat(groups, " "))
+			print("    left under Other: " .. table.concat(others, ", "))
+			equal(Catalog.zones[16606] and Catalog.zones[16606].group, "pvp", "the Horde's Darkspear Islands quests")
+			local frame = Open(orc)
+			for key in pairs(Catalog.zones) do
+				frame.quests:ShowZone(key)
+			end
+			NoErrors(orc)
 		end)
 	end
 end

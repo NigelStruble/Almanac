@@ -29,28 +29,8 @@ Catalog.all = {} -- the quests listed, by level
 
 -- Questie keeps a list of quests it hides (duplicates, quests that are not in
 -- the game, world event quests out of season) and knows which event quests
--- are in season. That is not part of Questie's public API, so it is only
--- used while it looks as expected, once Questie says it is ready.
-local modules = {}
-
-local function QuestieModule(name)
-	if modules[name] then
-		return modules[name]
-	end
-	local questie, loader = _G.Questie, _G.QuestieLoader
-	if type(questie) ~= "table" or type(loader) ~= "table" or type(loader.ImportModule) ~= "function" then
-		return nil
-	end
-	if type(questie.API) == "table" and not questie.API.isReady then
-		return nil
-	end
-	local ok, module = pcall(loader.ImportModule, loader, name)
-	if ok and type(module) == "table" then
-		modules[name] = module
-		return module
-	end
-	return nil
-end
+-- are in season (Data.QuestieModule says when it can be asked).
+local QuestieModule = Data.QuestieModule
 
 function Catalog.QuestieHidden()
 	local corrections = QuestieModule("QuestieCorrections")
@@ -350,26 +330,46 @@ local function BuildZones(ids)
 		list[#list + 1] = zone
 	end
 	local groups = {}
-	for _, info in ipairs(Data.GROUPS) do
-		local list = byGroup[info.key]
-		if list then
-			local ownClass = Player.classFile
-			sort(list, function(a, b)
-				-- The character's own class first.
-				local ca, cb = Data.SortClass(a.key) == ownClass, Data.SortClass(b.key) == ownClass
-				if ca ~= cb then
-					return ca
-				end
-				if info.key ~= "other" and info.key ~= "event" and info.key ~= "profession" then
-					local la, lb = a.low or 99, b.low or 99
-					if la ~= lb then
-						return la < lb
-					end
-				end
-				return a.name < b.name
-			end)
-			groups[#groups + 1] = { key = info.key, name = info.name, zones = list }
+	local ownClass = Player.classFile
+	local function AddGroup(key, name)
+		local list = byGroup[key]
+		if not list then
+			return
 		end
+		byGroup[key] = nil
+		sort(list, function(a, b)
+			-- The character's own class first.
+			local ca, cb = Data.SortClass(a.key) == ownClass, Data.SortClass(b.key) == ownClass
+			if ca ~= cb then
+				return ca
+			end
+			if key ~= "other" and key ~= "event" and key ~= "profession" then
+				local la, lb = a.low or 99, b.low or 99
+				if la ~= lb then
+					return la < lb
+				end
+			end
+			return a.name < b.name
+		end)
+		groups[#groups + 1] = { key = key, name = name, zones = list }
+	end
+	for _, info in ipairs(Data.GROUPS) do
+		if info.key == "dungeon" then
+			-- Continents only Questie has, after Almanac's.
+			local others = {}
+			for key in pairs(byGroup) do
+				if key:match("^questie") then
+					others[#others + 1] = key
+				end
+			end
+			sort(others, function(a, b)
+				return Data.GroupName(a) < Data.GroupName(b)
+			end)
+			for _, key in ipairs(others) do
+				AddGroup(key, Data.GroupName(key))
+			end
+		end
+		AddGroup(info.key, info.name)
 	end
 	return zones, groups
 end

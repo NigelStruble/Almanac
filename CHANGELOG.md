@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0
+
+- **Forever's new zones** are listed under their continents: Riverglades in the Eastern Kingdoms, and Mount Hyjal and Shen'dralas in Kalimdor. Zephras Isle, the Skyborne starting island, has a group of its own after Kalimdor; they had all been under Other.
+- **Darkspear Islands** is listed under Battlegrounds, and the Crafting writ quests under Professions.
+- **Zones that QuestieDB adds later** go where Questie's quest journal puts them, on their continent or in a group of their own, without waiting for an update to Almanac. This needs Questie turned on as well as QuestieDB.
+- **The Drowned City, Krol'dok Stronghold, Alcaz Prison and Blackmaw Hold** are listed under Dungeons with their 49 quests, which QuestieDB has but files under no zone. Each quest goes back to QuestieDB's zone once QuestieDB gives it one.
+- **Quests QuestieDB files under no zone** are listed where their quest giver stands, or else where they are turned in, instead of under "Unknown zone"; 59 of them go to Mount Hyjal, for example.
+- **City of Dalaran's second area** is part of the City of Dalaran dungeon, and The Shaper's Terrace's quests are listed under Un'Goro Crater, where the game's map puts it.
+- **Forever Dungeon Journal's entries that are not quests** (the Mallet of Zul'Farrak's page, a repeatable copy of The Medallion of Faith and the Gnomeregan punch cards) are no longer listed as quests.
+- **/almanac probe** says when QuestieDB files a quest under no zone.
+
 ## 1.0.1
 
 - **XP for quests below your level** now follows WoW: Forever's rule: full XP up to five levels above the quest, 80% at six, 60% at seven and half from eight on (Classic went down to 10%). Where the game lists a quest's XP for your character, Almanac shows that exact number.

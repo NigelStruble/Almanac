@@ -173,10 +173,10 @@ local function DeserializeCBOR(s)
 	return Item()
 end
 
--- The WoW folder: from ALMANAC_WOW_ADDONS, else where it is on the author's
--- machine.
+-- The WoW folder: from ALMANAC_WOW_ADDONS, else where WoW: Forever's is on the
+-- author's machine.
 function QuestieDB.Folder()
-	return os.getenv("ALMANAC_WOW_ADDONS") or "E:/World of Warcraft Windows/_classic_beta_/Interface/AddOns"
+	return os.getenv("ALMANAC_WOW_ADDONS") or "E:/World of Warcraft Windows/_forever_/Interface/AddOns"
 end
 
 function QuestieDB.Load(env, addons)

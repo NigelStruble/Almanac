@@ -118,9 +118,11 @@ local function Probe(id)
 	local quest = Data.Basics(id)
 	if quest then
 		-- Race masks go past 2^31 on Forever, too big for %d.
-		Print(format("%d \"%s\"%s: level %s, requires %d, zone %d (%s), races %.0f, classes %d, database XP %s",
+		local unfiled = Data.Source(id) == "questie" and Data.FiledZone(id) == 0
+		Print(format("%d \"%s\"%s: level %s, requires %d, zone %d (%s%s), races %.0f, classes %d, database XP %s",
 			id, quest.name, SOURCES[Data.Source(id)] or "", tostring(quest.level),
-			quest.reqLevel, quest.zone, Data.ZoneName(Data.ZoneKey(quest.zone)), quest.races, quest.classes,
+			quest.reqLevel, quest.zone, Data.ZoneName(Data.ZoneKey(quest.zone)),
+			unfiled and "; QuestieDB files it under no zone" or "", quest.races, quest.classes,
 			tostring((Data.BaseXP(id)))))
 		local state, reasons = Status.Of(id)
 		local why = {}

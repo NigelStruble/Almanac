@@ -7,18 +7,19 @@ local L, Data = ns.L, ns.Data
 -- journal is read while the game runs, through its ForeverDungeonJournal_NS
 -- global: FDJ.DB (dungeons and their quests), QUEST_PREREQ_CHAINS and
 -- QUEST_PREREQ_DETAILS (the quests before them), and its XP, money and quest
--- giver tables.
+-- giver tables. Both also say which dungeon a quest QuestieDB files under no
+-- zone belongs to (ZoneFor).
 --
 -- A quest QuestieDB has is always taken from QuestieDB, and one on Almanac's
 -- list from the list, so each one here drops out by itself once QuestieDB
--- adds it.
+-- adds it. Likewise a quest QuestieDB files under a zone stays there.
 
 local NewQuests = {}
 ns.NewQuests = NewQuests
 
 local _G = _G
-local type, pairs, ipairs, tonumber, floor, sort, format =
-	type, pairs, ipairs, tonumber, math.floor, table.sort, string.format
+local type, pairs, ipairs, next, tonumber, floor, sort, format =
+	type, pairs, ipairs, next, tonumber, math.floor, table.sort, string.format
 
 local CLASS_IDS = { WARRIOR = 1, PALADIN = 2, HUNTER = 3, ROGUE = 4, PRIEST = 5, SHAMAN = 7, MAGE = 8, WARLOCK = 9, DRUID = 11 }
 -- Dungeons only the journal knows get zone keys of their own, from here up.
@@ -30,12 +31,25 @@ local madeUp = MADE_UP
 local quests = {}
 local ids = {}
 local dungeonNames = {} -- [zone key] = name, for dungeons QuestieDB does not know
+local zoneFor = {} -- [questID] = its dungeon, for quests QuestieDB files under no zone
 
 -- "The Deadmines" and "Deadmines" are one dungeon.
 local function Normal(name)
 	return ((type(name) == "string" and name or ""):lower():gsub("^the ", ""))
 end
 NewQuests.Normal = Normal
+
+-- Whether a number is a quest ID. The journal lists a few things that are
+-- not quests under made-up numbers ("Mallet of Zul'Farrak" is -97100,
+-- Gnomeregan's punch cards 2930001 and up).
+local function QuestId(id)
+	return type(id) == "number" and id > 0 and id < 1000000 and id % 1 == 0
+end
+
+-- A quest QuestieDB has but files under no zone.
+local function Unfiled(id, exists)
+	return exists(id) and Data.FiledZone(id) == 0
+end
 
 local function Add(id, quest)
 	if quests[id] then
@@ -94,6 +108,13 @@ local function LoadOwn(list, exists)
 	for key, name in pairs(type(list.dungeons) == "table" and list.dungeons or {}) do
 		if not (Data.dungeons and Data.dungeons[key]) then
 			dungeonNames[key] = name
+		end
+	end
+	for key, dungeonQuests in pairs(type(list.dungeonQuests) == "table" and list.dungeonQuests or {}) do
+		for _, id in ipairs(type(dungeonQuests) == "table" and dungeonQuests or {}) do
+			if QuestId(id) and Unfiled(id, exists) then
+				zoneFor[id] = key
+			end
 		end
 	end
 end
@@ -182,10 +203,11 @@ local function JournalQuest(fdj, q, zone)
 end
 
 -- The zone key a dungeon of the journal goes under: the one QuestieDB or
--- Almanac's list has for it, else a made-up one.
+-- Almanac's list has for it (the journal's "Scarlet Monastery: Armory" is
+-- Scarlet Monastery), else a made-up one.
 local function DungeonKey(name, byName)
 	local normal = Normal(name)
-	local key = byName[normal]
+	local key = byName[normal] or byName[normal:match("^(.-):") or ""]
 	if not key then
 		madeUp = madeUp + 1
 		key = madeUp
@@ -193,6 +215,13 @@ local function DungeonKey(name, byName)
 		dungeonNames[key] = name
 	end
 	return key
+end
+
+-- Whether an entry of the journal is a dungeon: the others (a sleeping bag,
+-- an attunement, an item) have no bosses.
+local function IsDungeon(entry)
+	return type(entry) == "table" and type(entry.quests) == "table" and type(entry.bosses) == "table"
+		and next(entry.bosses) ~= nil
 end
 
 local function LoadJournal(exists)
@@ -213,14 +242,21 @@ local function LoadJournal(exists)
 		byName[Normal(name)] = byName[Normal(name)] or key
 	end
 
-	-- The dungeons' quests.
+	-- The dungeons' quests: those QuestieDB does not have, and those it has but
+	-- files under no zone.
 	for name, dungeon in pairs(fdj.DB) do
-		if type(dungeon) == "table" and type(dungeon.quests) == "table" then
+		if IsDungeon(dungeon) then
 			local key
 			for _, q in ipairs(dungeon.quests) do
-				if type(q) == "table" and type(q.id) == "number" and type(q.name) == "string" and not Known(q.id) then
-					key = key or DungeonKey(name, byName)
-					JournalQuest(fdj, q, key)
+				local id = type(q) == "table" and q.id
+				if type(id) == "number" and QuestId(id) and type(q.name) == "string" then
+					if not Known(id) then
+						key = key or DungeonKey(name, byName)
+						JournalQuest(fdj, q, key)
+					elseif not zoneFor[id] and Unfiled(id, exists) then
+						key = key or DungeonKey(name, byName)
+						zoneFor[id] = key
+					end
 				end
 			end
 		end
@@ -233,13 +269,13 @@ local function LoadJournal(exists)
 	local chains = type(fdj.QUEST_PREREQ_CHAINS) == "table" and fdj.QUEST_PREREQ_CHAINS or {}
 	local details = type(fdj.QUEST_PREREQ_DETAILS) == "table" and fdj.QUEST_PREREQ_DETAILS or {}
 	for target, steps in pairs(chains) do
-		if type(steps) == "table" then
+		if QuestId(target) and type(steps) == "table" then
 			local goal = quests[target]
 			local previous, zone
 			local listed = false
 			for _, step in ipairs(steps) do
 				local id = type(step) == "table" and step.id
-				if type(id) == "number" and id ~= previous then
+				if QuestId(id) and id ~= previous then
 					listed = listed or id == target
 					local quest = quests[id]
 					if not quest and not exists(id) then
@@ -296,7 +332,7 @@ end
 -- Reads Almanac's list, then the journal. exists(questID) says whether
 -- QuestieDB has a quest. Returns whether there are any.
 function NewQuests.Load(exists)
-	quests, ids, dungeonNames = {}, {}, {}
+	quests, ids, dungeonNames, zoneFor = {}, {}, {}, {}
 	madeUp = MADE_UP
 	LoadOwn(type(ns.ForeverQuests) == "table" and ns.ForeverQuests or {}, exists)
 	LoadJournal(exists)
@@ -310,6 +346,12 @@ end
 
 function NewQuests.Quest(id)
 	return quests[id]
+end
+
+-- The dungeon (zone key) a quest QuestieDB files under no zone belongs to,
+-- by Almanac's list or the journal; nil when neither says.
+function NewQuests.ZoneFor(id)
+	return zoneFor[id]
 end
 
 -- The name of a dungeon QuestieDB does not know, by zone key.

@@ -4,14 +4,20 @@ local _, ns = ...
 -- new dungeons (The Hall of Thanes, Ruins of Lordaeron), a new Deadmines
 -- quest, and the quests that lead to them or follow them. Almanac lists them
 -- until QuestieDB has them; a quest QuestieDB has is taken from QuestieDB, so
--- each one here drops out by itself (NewQuests.lua).
+-- each one here drops out by itself (NewQuests.lua). Also the dungeons of
+-- quests QuestieDB has but files under no zone (dungeonQuests), until it
+-- files them.
 --
--- Facts about the game, checked on 2026-09-28 against:
+-- Facts about the game, checked on 2026-09-28 (dungeonQuests on 2026-11-22)
+-- against:
 --   Wowhead's Forever database: levels, sides, series, objectives, who
---     starts and ends a quest (www.wowhead.com/forever)
+--     starts and ends a quest, the zone a quest is filed under
+--     (www.wowhead.com/forever)
 --   wowforevertalents.com: read from the Forever beta client's quest cache
 --   foreverchanges.pro and quissy.tv: the XP the beta really gives
 -- Money and reward items are not here: Almanac asks the game for them.
+--
+-- dungeonQuests[dungeon's area ID] = { quest ID, ... }
 --
 -- quests[quest ID] = {
 --   name,
@@ -26,6 +32,7 @@ local _, ns = ...
 -- }
 
 local HALL_OF_THANES, RUINS_OF_LORDAERON, DEADMINES = 16919, 16611, 1581
+local DROWNED_CITY, BLACKMAW_HOLD, ALCAZ_PRISON, KROLDOK_STRONGHOLD = 16550, 16554, 16620, 16842
 local DUN_MOROGH, IRONFORGE, WESTFALL, STORMWIND = 1, 1537, 40, 1519
 local TIRISFAL, SILVERPINE, UNDERCITY, DUSKWOOD = 85, 130, 1497, 10
 
@@ -39,6 +46,23 @@ ns.ForeverQuests = {
 	dungeons = {
 		[HALL_OF_THANES] = "The Hall of Thanes",
 		[RUINS_OF_LORDAERON] = "Ruins of Lordaeron",
+		[DROWNED_CITY] = "The Drowned City", -- Stranglethorn Vale
+		[BLACKMAW_HOLD] = "Blackmaw Hold", -- Azshara
+		[ALCAZ_PRISON] = "Alcaz Prison", -- Alcaz Island, Dustwallow Marsh
+		[KROLDOK_STRONGHOLD] = "Krol'dok Stronghold", -- Riverglades
+	},
+
+	-- The quests Wowhead files under each new dungeon. QuestieDB 1.1.4 has
+	-- them all, under no zone.
+	dungeonQuests = {
+		[DROWNED_CITY] = { 95775, 95776, 95787, 95788, 95789, 95791, 96774, 97130 },
+		[BLACKMAW_HOLD] = { 92065, 92066, 92067, 92069, 92070, 92343, 92344, 96246, 97173, 97198, 97327 },
+		[ALCAZ_PRISON] = {
+			95262, 95263, 95309, 95454, 95483, 96332, 96334, 96335, 96337, 96369, 96376, 96377, 96379, 96381, 96772,
+		},
+		[KROLDOK_STRONGHOLD] = {
+			94968, 94969, 94972, 94973, 94974, 94975, 94980, 94981, 94982, 94983, 94984, 94997, 94998, 95056, 96771,
+		},
 	},
 
 	quests = {
